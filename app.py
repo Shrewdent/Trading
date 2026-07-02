@@ -170,20 +170,22 @@ class Api:
         ticker = (ticker or "").strip().upper()
         trader = self._traders.get(ticker)
         if trader and trader.running:
+            market_open = trader.broker.is_market_open()
             trader.close_position()
-            return {"closed": True}
+            return {"closed": True, "market_open": market_open}
 
         # No active session for this ticker -- close directly against the account.
         if not config.has_alpaca_keys():
             raise ValueError("Add your Alpaca paper trading keys first.")
         broker = self._get_any_broker()
+        market_open = broker.is_market_open()
         pos = broker.get_position(ticker)
         if not pos:
             raise ValueError(f"No open position found for {ticker}.")
         exit_price = (pos["market_value"] / pos["qty"]) if pos["qty"] else 0
         result = broker.close_position(ticker)
         paper_trader.record_manual_close(ticker, exit_price, pos["qty"], result["status"])
-        return {"closed": True}
+        return {"closed": True, "market_open": market_open}
 
     def _get_any_broker(self) -> broker_module.AlpacaBroker:
         """Reuses a running session's broker connection when one exists,

@@ -237,6 +237,19 @@ Two more fixes, both prompted by watching the app run live:
   (mean-reversion strategies like Bollinger genuinely do win often, per
   the backtest — see above) or a data integrity problem.
 
+## Market-closed close-position messaging
+
+Found live: clicking Close Position while the market is closed used to
+return a plain `{"closed": true}` even though a market order submitted
+after hours just sits unfilled until the next open — the position wasn't
+actually closed, but the app said it was. `close_position()` now checks
+`broker.is_market_open()` right before submitting and returns that flag
+alongside the result; the frontend shows a distinct message ("submitted,
+but the market is closed — it will sit unfilled until market open")
+instead of a false "closed" success toast. The order still gets
+submitted either way — this doesn't block the action, just makes the
+response honest about what actually happened.
+
 ## Suggested next steps
 
 - **Stop-loss / take-profit rules** — right now positions only exit on the

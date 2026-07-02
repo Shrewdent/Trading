@@ -492,7 +492,11 @@ async function closePaperPosition(ticker) {
     toast(res.error, "error");
     return;
   }
-  toast(`Position closed for ${ticker}.`, "success");
+  if (res.data.market_open === false) {
+    toast(`Close order submitted for ${ticker}, but the market is closed -- it will sit unfilled until market open.`, "info");
+  } else {
+    toast(`Position closed for ${ticker}.`, "success");
+  }
   refreshPaperStatus();
 }
 
