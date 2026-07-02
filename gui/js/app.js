@@ -375,9 +375,21 @@ async function showBacktestDetail(id) {
 // Paper Trader
 // =====================================================================
 
+let ALL_PAPER_TRADES = [];
+let PAPER_HISTORY_SORT = { key: "timestamp", dir: -1 };
+
 function wirePaperTraderTab() {
   document.getElementById("pt-save-keys").addEventListener("click", savePaperKeys);
   document.getElementById("pt-start").addEventListener("click", startPaperTrader);
+  document.getElementById("pt-history-filter").addEventListener("input", renderAllPaperTradesTable);
+  document.querySelectorAll("#pt-all-history th[data-sort]").forEach((th) => {
+    th.addEventListener("click", () => {
+      const key = th.dataset.sort;
+      PAPER_HISTORY_SORT.dir = PAPER_HISTORY_SORT.key === key ? -PAPER_HISTORY_SORT.dir : -1;
+      PAPER_HISTORY_SORT.key = key;
+      renderAllPaperTradesTable();
+    });
+  });
 }
 
 async function onPaperTraderTabShown() {
@@ -389,9 +401,46 @@ async function onPaperTraderTabShown() {
 
   if (hasKeys) {
     startPaperPolling();
+    loadAllPaperTrades();
   } else {
     stopPaperPolling();
   }
+}
+
+async function loadAllPaperTrades() {
+  const res = await API.get_all_paper_trades();
+  if (!res.ok) return;
+  ALL_PAPER_TRADES = res.data;
+  renderAllPaperTradesTable();
+}
+
+function renderAllPaperTradesTable() {
+  const filter = document.getElementById("pt-history-filter").value.trim().toLowerCase();
+  let rows = ALL_PAPER_TRADES.filter((t) => !filter || t.ticker.toLowerCase().includes(filter));
+
+  rows = rows.slice().sort((a, b) => {
+    const av = a[PAPER_HISTORY_SORT.key];
+    const bv = b[PAPER_HISTORY_SORT.key];
+    if (av < bv) return -1 * PAPER_HISTORY_SORT.dir;
+    if (av > bv) return 1 * PAPER_HISTORY_SORT.dir;
+    return 0;
+  });
+
+  const tbody = document.querySelector("#pt-all-history tbody");
+  tbody.innerHTML = rows
+    .map(
+      (t) => `
+      <tr>
+        <td>${t.timestamp}</td>
+        <td><span class="badge">${t.ticker}</span></td>
+        <td>${t.signal}</td>
+        <td class="${t.side === "buy" ? "cell-positive" : "cell-negative"}">${t.side}</td>
+        <td>${t.qty ?? "--"}</td>
+        <td>${t.price !== null && t.price !== undefined ? `$${Number(t.price).toFixed(2)}` : "--"}</td>
+        <td>${t.status}</td>
+      </tr>`
+    )
+    .join("");
 }
 
 async function savePaperKeys() {
@@ -453,6 +502,7 @@ async function closePaperPosition(ticker) {
   }
   toast(`Position closed for ${ticker}.`, "success");
   refreshPaperStatus();
+  loadAllPaperTrades();
 }
 
 function startPaperPolling() {
@@ -471,7 +521,7 @@ function stopPaperPolling() {
 async function refreshPaperStatus() {
   const res = await API.get_paper_status();
   if (!res.ok) return;
-  const { account, sessions } = res.data;
+  const { account, sessions, open_positions, realized_pnl } = res.data;
 
   document.getElementById("header-equity").textContent = account.equity ? `$${account.equity.toFixed(2)}` : "--";
   document.getElementById("header-bp").textContent = account.buying_power ? `$${account.buying_power.toFixed(2)}` : "--";
@@ -505,7 +555,44 @@ async function refreshPaperStatus() {
 
   runningSessions.forEach((s) => updateSessionCard(getOrCreateSessionCard(s.ticker), s));
 
+  renderOpenPositions(open_positions || []);
+  renderRealizedPnl(realized_pnl || { total_pnl_dollars: 0, num_closed_trades: 0, win_rate: 0 });
+
   resizeAllCharts();
+}
+
+function renderOpenPositions(positions) {
+  const tbody = document.querySelector("#pt-open-positions tbody");
+  const emptyHint = document.getElementById("pt-open-positions-empty");
+
+  emptyHint.classList.toggle("hidden", positions.length > 0);
+
+  tbody.innerHTML = positions
+    .map(
+      (p) => `
+      <tr>
+        <td><span class="badge">${p.symbol}</span></td>
+        <td>${p.qty}</td>
+        <td>$${p.entry_price.toFixed(2)}</td>
+        <td>$${p.market_value.toFixed(2)}</td>
+        <td class="${pctClass(p.unrealized_pl_pct)}">${fmtPct(p.unrealized_pl_pct)}</td>
+        <td><span class="badge${p.session_active ? " badge-live on" : ""}">${p.session_active ? "Yes" : "No"}</span></td>
+        <td><button class="btn btn-secondary position-close-btn" data-ticker="${p.symbol}">Close</button></td>
+      </tr>`
+    )
+    .join("");
+
+  tbody.querySelectorAll(".position-close-btn").forEach((btn) => {
+    btn.addEventListener("click", () => closePaperPosition(btn.dataset.ticker));
+  });
+}
+
+function renderRealizedPnl(pnl) {
+  const totalEl = document.getElementById("pt-realized-total");
+  totalEl.textContent = `${pnl.total_pnl_dollars >= 0 ? "+" : ""}$${pnl.total_pnl_dollars.toFixed(2)}`;
+  totalEl.className = "metric-value " + pctClass(pnl.total_pnl_dollars);
+  document.getElementById("pt-realized-count").textContent = pnl.num_closed_trades;
+  document.getElementById("pt-realized-winrate").textContent = `${pnl.win_rate.toFixed(1)}%`;
 }
 
 function getOrCreateSessionCard(ticker) {

@@ -141,6 +141,46 @@ a different ticker, each capped at its own fixed dollar allocation:
   protected by a lock (`paper_trader.py`'s `_TRADE_LOG_LOCK`) so concurrent
   tickers writing at the same time can't clobber each other's entries.
 
+## Open positions, unified history, and realized P&L
+
+Closing the app doesn't close your positions — they live on Alpaca, not
+locally — but it does wipe the app's memory of which sessions were
+running. Reopening used to show "No sessions running" even if you were
+still holding something from yesterday, with nothing to tell you so. Three
+additions fix that:
+
+- **Open Positions panel** (Paper Trader tab, below the session cards):
+  every open position on the account, fetched via
+  `broker.get_all_positions()`, whether or not a local session is
+  currently monitoring it. Each row shows a "Monitored" badge (green
+  "Yes" if a running session owns that ticker, gray "No" if it's
+  orphaned) and its own Close button — closing works either way.
+  `app.py`'s `close_position()` now routes to the session if one's
+  running, or closes directly against the account if not, logging the
+  trade via `paper_trader.record_manual_close()` in the orphaned case.
+  This is a permanent view rather than a one-time startup toast — nothing
+  to miss by not looking at the right moment.
+- **All Trade History**: a sortable/filterable table across every ticker
+  ever traded, not just the currently-visible session cards (which
+  disappear when a session stops, taking their per-card history out of
+  view with them — the data was always in `paper_trades.json`, just not
+  browsable from the UI once a card was gone).
+- **Realized P&L**: the app previously only showed *unrealized* P&L while
+  a position was open — once closed, that number just vanished with no
+  running total. `paper_trader.compute_realized_pnl()` pairs sequential
+  buy/sell events per ticker across the full trade log and reports total
+  $ P&L, closed-trade count, and win rate — the actual answer to "is this
+  strategy making money" once you're live, not just backtested.
+
+While building this, fixed an accuracy gap flagged earlier: manual
+position closes were logging the *entry* price as a placeholder exit
+price (since Alpaca's close-position call doesn't return a fill price
+immediately). Both the session-based and orphaned close paths now fetch
+the position's current market value right before closing and log that
+instead — accurate for both, and required for realized P&L to be
+trustworthy. Trades logged before this fix keep their old approximate
+price.
+
 ## Suggested next steps
 
 - **Stop-loss / take-profit rules** — right now positions only exit on the

@@ -22,7 +22,7 @@ BAR_POLL_SECONDS = 60
 TICK_SECONDS = 5
 
 
-def _load_all_trades() -> list:
+def load_all_trades() -> list:
     if os.path.exists(TRADE_LOG_PATH):
         try:
             with open(TRADE_LOG_PATH, "r") as f:
@@ -36,10 +36,58 @@ def _append_trade(entry: dict) -> None:
     """Read-modify-write under a lock so concurrent sessions (different
     tickers, different threads) never clobber each other's log entries."""
     with _TRADE_LOG_LOCK:
-        all_trades = _load_all_trades()
+        all_trades = load_all_trades()
         all_trades.append(entry)
         with open(TRADE_LOG_PATH, "w") as f:
             json.dump(all_trades, f, indent=2)
+
+
+def record_manual_close(ticker: str, price: float, qty: float, status: str) -> None:
+    """Logs a manual close for a ticker with no active PaperTrader session
+    (an orphaned position closed from the Open Positions panel)."""
+    entry = {
+        "timestamp": dt.datetime.now().isoformat(timespec="seconds"),
+        "ticker": ticker,
+        "signal": "manual_close",
+        "price": round(float(price), 4) if price else None,
+        "side": "sell",
+        "qty": qty,
+        "status": status,
+    }
+    _append_trade(entry)
+
+
+def compute_realized_pnl(trades: list) -> dict:
+    """Pairs sequential buy/sell events per ticker across the whole trade
+    log and sums up completed round-trips. Trades logged before the exit-
+    price accuracy fix may understate/overstate individual trades, but the
+    pairing logic itself is unaffected."""
+    by_ticker: dict[str, list] = {}
+    for t in trades:
+        by_ticker.setdefault(t["ticker"], []).append(t)
+
+    closed = []
+    for ticker_trades in by_ticker.values():
+        open_trade = None
+        for t in ticker_trades:
+            if t["side"] == "buy":
+                open_trade = t
+            elif t["side"] == "sell" and open_trade and t.get("price") and open_trade.get("price"):
+                qty = t.get("qty") or 0
+                pnl_pct = (t["price"] / open_trade["price"] - 1) * 100
+                pnl_dollars = (t["price"] - open_trade["price"]) * qty
+                closed.append({"pnl_pct": pnl_pct, "pnl_dollars": pnl_dollars})
+                open_trade = None
+
+    total_pnl_dollars = sum(c["pnl_dollars"] for c in closed)
+    wins = sum(1 for c in closed if c["pnl_pct"] > 0)
+    win_rate = (wins / len(closed) * 100) if closed else 0.0
+
+    return {
+        "total_pnl_dollars": round(total_pnl_dollars, 2),
+        "num_closed_trades": len(closed),
+        "win_rate": round(win_rate, 2),
+    }
 
 
 class PaperTrader:
@@ -100,7 +148,7 @@ class PaperTrader:
         self.ticker = ticker.strip().upper()
         self.strategy_name = strategy_name
         self.allocated_dollars = allocated_dollars
-        self.trade_history = [t for t in _load_all_trades() if t["ticker"] == self.ticker]
+        self.trade_history = [t for t in load_all_trades() if t["ticker"] == self.ticker]
         self._last_bar_check = 0.0
         self._last_account_check = 0.0
         self._stop_flag.clear()
@@ -120,8 +168,11 @@ class PaperTrader:
     def close_position(self):
         if self.position != "long":
             raise ValueError("No open position to close.")
+        pos = self.broker.get_position(self.ticker)
+        exit_price = (pos["market_value"] / pos["qty"]) if pos and pos["qty"] else (self.entry_price or 0)
+        qty = pos["qty"] if pos else 0
         result = self.broker.close_position(self.ticker)
-        self._record_trade("manual_close", "sell", self.entry_price or 0, status=result["status"])
+        self._record_trade("manual_close", "sell", exit_price, qty=qty, status=result["status"])
         self.position = "flat"
         self.entry_price = None
         self._push_notification(f"Position closed for {self.ticker}.", "info")

@@ -169,6 +169,61 @@
 
           <div id="pt-sessions"></div>
 
+          <div class="panel">
+            <h3>Open Positions</h3>
+            <p class="panel-subtitle">Every open position on the account, including any not currently being monitored by a session above.</p>
+            <table class="data-table" id="pt-open-positions">
+              <thead>
+                <tr>
+                  <th>Ticker</th>
+                  <th>Qty</th>
+                  <th>Entry Price</th>
+                  <th>Market Value</th>
+                  <th>Unrealized P&amp;L</th>
+                  <th>Monitored</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+            <div class="empty-hint hidden" id="pt-open-positions-empty">No open positions.</div>
+          </div>
+
+          <div class="panel">
+            <h3>All Trade History</h3>
+            <div class="metrics-panel" id="pt-realized-pnl-panel">
+              <div class="metric-card">
+                <div class="metric-label">Realized P&amp;L</div>
+                <div class="metric-value" id="pt-realized-total">--</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-label">Closed Trades</div>
+                <div class="metric-value" id="pt-realized-count">--</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-label">Win Rate</div>
+                <div class="metric-value" id="pt-realized-winrate">--</div>
+              </div>
+            </div>
+            <div class="results-toolbar">
+              <input id="pt-history-filter" type="text" placeholder="Filter by ticker..." />
+            </div>
+            <table class="data-table sortable" id="pt-all-history">
+              <thead>
+                <tr>
+                  <th data-sort="timestamp">Time</th>
+                  <th data-sort="ticker">Ticker</th>
+                  <th data-sort="signal">Signal</th>
+                  <th data-sort="side">Side</th>
+                  <th data-sort="qty">Qty</th>
+                  <th data-sort="price">Price</th>
+                  <th data-sort="status">Status</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+
           <template id="pt-session-card-template">
             <div class="panel session-card">
               <div class="session-card-header">

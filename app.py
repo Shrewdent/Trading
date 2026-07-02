@@ -167,11 +167,32 @@ class Api:
 
     @friendly_error
     def close_position(self, ticker: str):
-        trader = self._traders.get((ticker or "").strip().upper())
-        if not trader:
-            raise ValueError(f"No session running for {ticker}.")
-        trader.close_position()
+        ticker = (ticker or "").strip().upper()
+        trader = self._traders.get(ticker)
+        if trader and trader.running:
+            trader.close_position()
+            return {"closed": True}
+
+        # No active session for this ticker -- close directly against the account.
+        if not config.has_alpaca_keys():
+            raise ValueError("Add your Alpaca paper trading keys first.")
+        broker = self._get_any_broker()
+        pos = broker.get_position(ticker)
+        if not pos:
+            raise ValueError(f"No open position found for {ticker}.")
+        exit_price = (pos["market_value"] / pos["qty"]) if pos["qty"] else 0
+        result = broker.close_position(ticker)
+        paper_trader.record_manual_close(ticker, exit_price, pos["qty"], result["status"])
         return {"closed": True}
+
+    def _get_any_broker(self) -> broker_module.AlpacaBroker:
+        """Reuses a running session's broker connection when one exists,
+        so this doesn't spin up a fresh Alpaca client on every 5s poll."""
+        for trader in self._traders.values():
+            return trader.broker
+        cfg = config.load()
+        keys = cfg["alpaca"]
+        return broker_module.AlpacaBroker(keys["api_key"], keys["secret_key"])
 
     @friendly_error
     def get_paper_status(self):
@@ -183,10 +204,29 @@ class Api:
                 equity, buying_power = trader.equity, trader.buying_power
                 break
 
+        open_positions = []
+        if config.has_alpaca_keys():
+            try:
+                broker = self._get_any_broker()
+                open_positions = broker.get_all_positions()
+                active_tickers = {t for t, tr in self._traders.items() if tr.running}
+                for p in open_positions:
+                    p["session_active"] = p["symbol"] in active_tickers
+            except broker_module.BrokerError:
+                pass  # don't break the whole status poll over a transient fetch error
+
+        realized_pnl = paper_trader.compute_realized_pnl(paper_trader.load_all_trades())
+
         return {
             "account": {"equity": equity, "buying_power": buying_power},
             "sessions": sessions,
+            "open_positions": open_positions,
+            "realized_pnl": realized_pnl,
         }
+
+    @friendly_error
+    def get_all_paper_trades(self):
+        return paper_trader.load_all_trades()
 
 
 def main():

@@ -72,6 +72,23 @@ class AlpacaBroker:
             "unrealized_pl_pct": float(pos.unrealized_plpc) * 100,
         }
 
+    def get_all_positions(self) -> list[dict]:
+        try:
+            positions = self.trading_client.get_all_positions()
+        except Exception as e:
+            raise BrokerError(f"Could not fetch positions: {e}")
+        return [
+            {
+                "symbol": p.symbol,
+                "qty": float(p.qty),
+                "entry_price": float(p.avg_entry_price),
+                "market_value": float(p.market_value),
+                "unrealized_pl": float(p.unrealized_pl),
+                "unrealized_pl_pct": float(p.unrealized_plpc) * 100,
+            }
+            for p in positions
+        ]
+
     def get_recent_bars(self, symbol: str, lookback: pd.Timedelta) -> pd.DataFrame:
         """Recent minute bars from Alpaca's free IEX feed."""
         try:
