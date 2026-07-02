@@ -181,6 +181,37 @@ instead — accurate for both, and required for realized P&L to be
 trustworthy. Trades logged before this fix keep their old approximate
 price.
 
+## Real fill prices, live-updating history, and status formatting
+
+Two more accuracy/UX fixes:
+
+- **Real fill prices for algorithmic trades.** Buy/sell signals used to
+  log the bar's *close* price — the price that triggered the decision —
+  not what Alpaca actually filled at. Market orders can execute a few
+  cents off that reference price (spread, momentary movement), compounded
+  by up to a minute of staleness since signals are only checked once every
+  `BAR_POLL_SECONDS`. `PaperTrader._wait_for_fill()` now polls
+  `broker.get_order()` for up to 3 seconds after submitting, and logs the
+  real average fill price (also now used for `entry_price`, so unrealized
+  P&L is accurate too). Falls back to the trigger price only if the order
+  hasn't reported a fill by the timeout — market orders during regular
+  hours almost always resolve in well under a second, so this is a rare
+  path. A transient error mid-poll is swallowed rather than propagated,
+  since the order was already submitted by that point — letting the
+  exception bubble up would mean a real fill goes completely unlogged.
+- **All Trade History now genuinely live.** It previously only reloaded
+  on tab-show or after a manual close, so a strategy trading automatically
+  while you sat on the tab wouldn't show up until you left and came back.
+  `get_paper_status()` already reads the full trade log every 5 seconds
+  for the realized P&L calculation — the raw list is now returned in the
+  same response (`all_trades`) at zero extra cost, and the frontend
+  re-renders the table on every poll like everything else on the page.
+- **Order status strings cleaned up** — `str(order.status)` on Alpaca's
+  enum returns e.g. `"OrderStatus.PENDING_NEW"`; switched to
+  `order.status.value` for a plain `"pending_new"` in both the trade log
+  and the API responses. Purely cosmetic, but was showing up directly in
+  the Status column of every trade table.
+
 ## Suggested next steps
 
 - **Stop-loss / take-profit rules** — right now positions only exit on the

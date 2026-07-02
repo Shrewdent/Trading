@@ -215,18 +215,16 @@ class Api:
             except broker_module.BrokerError:
                 pass  # don't break the whole status poll over a transient fetch error
 
-        realized_pnl = paper_trader.compute_realized_pnl(paper_trader.load_all_trades())
+        all_trades = paper_trader.load_all_trades()
+        realized_pnl = paper_trader.compute_realized_pnl(all_trades)
 
         return {
             "account": {"equity": equity, "buying_power": buying_power},
             "sessions": sessions,
             "open_positions": open_positions,
             "realized_pnl": realized_pnl,
+            "all_trades": all_trades,
         }
-
-    @friendly_error
-    def get_all_paper_trades(self):
-        return paper_trader.load_all_trades()
 
 
 def main():

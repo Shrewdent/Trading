@@ -232,11 +232,12 @@ class PaperTrader:
                 qty = self._position_size(latest_price)
                 if qty > 0:
                     result = self.broker.submit_market_order(self.ticker, qty, "buy")
-                    self._record_trade("buy_signal", "buy", latest_price, qty, result["status"])
+                    fill_price = self._wait_for_fill(result["id"], latest_price)
+                    self._record_trade("buy_signal", "buy", fill_price, qty, result["status"])
                     self.position = "long"
-                    self.entry_price = latest_price
+                    self.entry_price = fill_price
                     self._push_notification(
-                        f"BUY signal fired for {self.ticker} @ ${latest_price:.2f}", "success"
+                        f"BUY signal fired for {self.ticker} @ ${fill_price:.2f}", "success"
                     )
 
             elif latest_signal == -1 and self.position == "long":
@@ -244,12 +245,33 @@ class PaperTrader:
                 qty = pos["qty"] if pos else 0
                 if qty > 0:
                     result = self.broker.submit_market_order(self.ticker, qty, "sell")
-                    self._record_trade("sell_signal", "sell", latest_price, qty, result["status"])
+                    fill_price = self._wait_for_fill(result["id"], latest_price)
+                    self._record_trade("sell_signal", "sell", fill_price, qty, result["status"])
                     self.position = "flat"
                     self.entry_price = None
                     self._push_notification(
-                        f"SELL signal fired for {self.ticker} @ ${latest_price:.2f}", "success"
+                        f"SELL signal fired for {self.ticker} @ ${fill_price:.2f}", "success"
                     )
+
+    def _wait_for_fill(self, order_id: str, fallback_price: float, timeout: float = 3.0, interval: float = 0.3) -> float:
+        """Polls briefly for the order's real average fill price. Market
+        orders during regular hours typically fill in well under a second;
+        if it hasn't reported a fill by the timeout, falls back to the bar
+        close price that triggered the trade rather than blocking longer.
+
+        The order was already submitted by the time this runs -- a
+        transient error here must not abort the caller, or a real fill
+        would go completely unlogged even though it happened on Alpaca."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            try:
+                order = self.broker.get_order(order_id)
+            except broker_module.BrokerError:
+                order = None
+            if order and order["filled_avg_price"]:
+                return order["filled_avg_price"]
+            time.sleep(interval)
+        return fallback_price
 
     def _position_size(self, price):
         if not self.buying_power or not self.allocated_dollars or price <= 0:

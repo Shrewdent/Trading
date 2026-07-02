@@ -401,17 +401,9 @@ async function onPaperTraderTabShown() {
 
   if (hasKeys) {
     startPaperPolling();
-    loadAllPaperTrades();
   } else {
     stopPaperPolling();
   }
-}
-
-async function loadAllPaperTrades() {
-  const res = await API.get_all_paper_trades();
-  if (!res.ok) return;
-  ALL_PAPER_TRADES = res.data;
-  renderAllPaperTradesTable();
 }
 
 function renderAllPaperTradesTable() {
@@ -502,7 +494,6 @@ async function closePaperPosition(ticker) {
   }
   toast(`Position closed for ${ticker}.`, "success");
   refreshPaperStatus();
-  loadAllPaperTrades();
 }
 
 function startPaperPolling() {
@@ -521,7 +512,7 @@ function stopPaperPolling() {
 async function refreshPaperStatus() {
   const res = await API.get_paper_status();
   if (!res.ok) return;
-  const { account, sessions, open_positions, realized_pnl } = res.data;
+  const { account, sessions, open_positions, realized_pnl, all_trades } = res.data;
 
   document.getElementById("header-equity").textContent = account.equity ? `$${account.equity.toFixed(2)}` : "--";
   document.getElementById("header-bp").textContent = account.buying_power ? `$${account.buying_power.toFixed(2)}` : "--";
@@ -557,6 +548,9 @@ async function refreshPaperStatus() {
 
   renderOpenPositions(open_positions || []);
   renderRealizedPnl(realized_pnl || { total_pnl_dollars: 0, num_closed_trades: 0, win_rate: 0 });
+
+  ALL_PAPER_TRADES = all_trades || [];
+  renderAllPaperTradesTable();
 
   resizeAllCharts();
 }

@@ -36,7 +36,7 @@ class AlpacaBroker:
             raise BrokerError(f"Alpaca rejected the connection - check your keys. ({str(e).strip()})")
         except Exception as e:
             raise BrokerError(f"Could not reach Alpaca: {e}")
-        return {"account_number": account.account_number, "status": str(account.status)}
+        return {"account_number": account.account_number, "status": account.status.value}
 
     def get_account(self) -> dict:
         try:
@@ -130,7 +130,17 @@ class AlpacaBroker:
             raise BrokerError(f"Order rejected: {e}")
         except Exception as e:
             raise BrokerError(f"Could not submit order: {e}")
-        return {"id": str(order.id), "status": str(order.status)}
+        return {"id": str(order.id), "status": order.status.value}
+
+    def get_order(self, order_id: str) -> dict | None:
+        try:
+            order = self.trading_client.get_order_by_id(order_id)
+        except Exception as e:
+            raise BrokerError(f"Could not fetch order status: {e}")
+        return {
+            "status": order.status.value,
+            "filled_avg_price": float(order.filled_avg_price) if order.filled_avg_price else None,
+        }
 
     def close_position(self, symbol: str) -> dict:
         try:
@@ -139,4 +149,4 @@ class AlpacaBroker:
             raise BrokerError(f"Could not close position: {e}")
         except Exception as e:
             raise BrokerError(f"Could not close position: {e}")
-        return {"id": str(order.id), "status": str(order.status)}
+        return {"id": str(order.id), "status": order.status.value}
