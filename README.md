@@ -212,6 +212,31 @@ Two more accuracy/UX fixes:
   and the API responses. Purely cosmetic, but was showing up directly in
   the Status column of every trade table.
 
+## Chart display window and trade-log integrity check
+
+Two more fixes, both prompted by watching the app run live:
+
+- **Live chart no longer crams days of bars into one view.** The bar fetch
+  (`get_recent_bars(ticker, pd.Timedelta(days=5))`) pulls 5 days of
+  1-minute bars so indicators like a 50-period SMA always have enough
+  warmup data, safely spanning weekends. That same wide window was also
+  being *displayed*, which meant trade markers from days apart ended up
+  visually stacked together. `_build_chart_data()` now slices to the most
+  recent `CHART_DISPLAY_BARS` (390, roughly one trading day) for what's
+  rendered, while signal computation still runs against the full fetch —
+  trading behavior is unchanged, only the chart's visual density is.
+- **Unmatched-buy detection in `compute_realized_pnl()`.** The buy/sell
+  pairing logic assumes trades alternate cleanly per ticker; if local
+  position state ever desynced from Alpaca's real state (e.g. right after
+  a restart, before the first re-sync lands) and two buys fired back to
+  back, the second would silently overwrite the first in the pairing,
+  producing a bogus "win." The function now counts these as
+  `unmatched_buys`, and the All Trade History panel shows a red warning
+  line if any are found — a way to know for certain rather than guess
+  whether an unusually high win rate reflects real strategy behavior
+  (mean-reversion strategies like Bollinger genuinely do win often, per
+  the backtest — see above) or a data integrity problem.
+
 ## Suggested next steps
 
 - **Stop-loss / take-profit rules** — right now positions only exit on the

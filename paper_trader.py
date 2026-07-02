@@ -21,6 +21,13 @@ ACCOUNT_REFRESH_SECONDS = 30
 BAR_POLL_SECONDS = 60
 TICK_SECONDS = 5
 
+# The bar fetch uses a wide lookback (see _tick) so indicators like a
+# 50-period SMA always have enough warmup data, safely spanning weekends.
+# The chart only needs to *display* recent activity -- rendering all of
+# that fetched history at once crams days of bars into one view and makes
+# trade markers visually stack. 390 bars is roughly one trading day.
+CHART_DISPLAY_BARS = 390
+
 
 def load_all_trades() -> list:
     if os.path.exists(TRADE_LOG_PATH):
@@ -67,10 +74,17 @@ def compute_realized_pnl(trades: list) -> dict:
         by_ticker.setdefault(t["ticker"], []).append(t)
 
     closed = []
+    unmatched_buys = 0
     for ticker_trades in by_ticker.values():
         open_trade = None
         for t in ticker_trades:
             if t["side"] == "buy":
+                if open_trade is not None:
+                    # A prior buy never got a matching sell before this one --
+                    # local position state may have desynced from Alpaca's,
+                    # or a trade was placed outside the app. Either way, the
+                    # pairing below silently drops the earlier buy, so flag it.
+                    unmatched_buys += 1
                 open_trade = t
             elif t["side"] == "sell" and open_trade and t.get("price") and open_trade.get("price"):
                 qty = t.get("qty") or 0
@@ -87,6 +101,7 @@ def compute_realized_pnl(trades: list) -> dict:
         "total_pnl_dollars": round(total_pnl_dollars, 2),
         "num_closed_trades": len(closed),
         "win_rate": round(win_rate, 2),
+        "unmatched_buys": unmatched_buys,
     }
 
 
@@ -283,6 +298,11 @@ class PaperTrader:
     # ---------- chart data ----------
 
     def _build_chart_data(self, sig_df: pd.DataFrame) -> dict:
+        # sig_df carries the full warmup-safe lookback (see _tick); only
+        # display the most recent stretch so bars and trade markers don't
+        # visually stack.
+        display_df = sig_df.tail(CHART_DISPLAY_BARS)
+
         ohlc = [
             {
                 "time": int(ts.timestamp()),
@@ -292,24 +312,27 @@ class PaperTrader:
                 "close": round(float(c), 4),
             }
             for ts, o, h, l, c in zip(
-                sig_df.index, sig_df["Open"], sig_df["High"], sig_df["Low"], sig_df["Close"]
+                display_df.index, display_df["Open"], display_df["High"], display_df["Low"], display_df["Close"]
             )
         ]
 
         indicators = {}
         for col in ("sma_fast", "sma_slow", "rsi", "sma", "roc", "bb_upper", "bb_middle", "bb_lower"):
-            if col not in sig_df.columns:
+            if col not in display_df.columns:
                 continue
             indicators[col] = [
                 {"time": int(ts.timestamp()), "value": round(float(v), 4)}
-                for ts, v in sig_df[col].items()
+                for ts, v in display_df[col].items()
                 if pd.notna(v)
             ]
+
+        display_start = int(display_df.index[0].timestamp()) if len(display_df) else 0
+        trades = [t for t in self._trade_pairs() if t["entry_date"] >= display_start]
 
         return {
             "ohlc": ohlc,
             "indicators": indicators,
-            "trades": self._trade_pairs(),
+            "trades": trades,
             "equity_curve": [],
             "train_test_cutoff": None,
         }

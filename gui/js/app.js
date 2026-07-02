@@ -587,6 +587,16 @@ function renderRealizedPnl(pnl) {
   totalEl.className = "metric-value " + pctClass(pnl.total_pnl_dollars);
   document.getElementById("pt-realized-count").textContent = pnl.num_closed_trades;
   document.getElementById("pt-realized-winrate").textContent = `${pnl.win_rate.toFixed(1)}%`;
+
+  const warningEl = document.getElementById("pt-realized-pnl-warning");
+  const unmatched = pnl.unmatched_buys || 0;
+  if (unmatched > 0) {
+    const plural = unmatched > 1 ? "s" : "";
+    warningEl.textContent = `${unmatched} unmatched buy${plural} found in the trade log -- P&L pairing may be inaccurate for those trades.`;
+    warningEl.classList.remove("hidden");
+  } else {
+    warningEl.classList.add("hidden");
+  }
 }
 
 function getOrCreateSessionCard(ticker) {
