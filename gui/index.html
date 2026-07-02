@@ -1,0 +1,269 @@
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Backtesting &amp; Paper Trading Platform</title>
+<link rel="stylesheet" href="css/style.css" />
+
+<div id="app">
+  <aside id="sidebar" class="collapsed-mobile">
+    <div class="sidebar-top">
+      <button id="sidebar-toggle" class="icon-btn" title="Collapse sidebar">&#9776;</button>
+      <div class="brand"><span class="brand-mark">&#9650;</span><span class="brand-name">TradeBench</span></div>
+    </div>
+    <nav class="tabs">
+      <button class="tab-btn active" data-tab="backtester">
+        <span class="tab-icon">&#128202;</span><span class="tab-label">Backtester</span>
+      </button>
+      <button class="tab-btn" data-tab="paper-trader">
+        <span class="tab-icon">&#9889;</span><span class="tab-label">Paper Trader</span>
+      </button>
+      <button class="tab-btn" data-tab="results">
+        <span class="tab-icon">&#128220;</span><span class="tab-label">Results History</span>
+      </button>
+    </nav>
+  </aside>
+
+  <div id="main">
+    <header id="header">
+      <div class="header-title">
+        <h1 id="header-tab-name">Backtester</h1>
+      </div>
+      <div id="paper-account-summary" class="account-summary hidden">
+        <span class="badge badge-live" id="paper-live-badge">Live: No</span>
+        <span class="account-figure">Equity <strong id="header-equity">--</strong></span>
+        <span class="account-figure">Buying Power <strong id="header-bp">--</strong></span>
+      </div>
+    </header>
+
+    <main id="content">
+      <!-- ===================== Backtester Tab ===================== -->
+      <section id="tab-backtester" class="tab-panel active">
+        <div class="panel controls-panel">
+          <div class="field">
+            <label for="bt-ticker">Ticker</label>
+            <input id="bt-ticker" type="text" placeholder="SPY" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="bt-start">Start Date</label>
+            <input id="bt-start" type="date" />
+          </div>
+          <div class="field">
+            <label for="bt-end">End Date</label>
+            <input id="bt-end" type="date" />
+          </div>
+          <div class="field">
+            <label for="bt-strategy">Strategy</label>
+            <select id="bt-strategy"></select>
+          </div>
+          <div class="field checkbox-field">
+            <label><input id="bt-split" type="checkbox" /> Train/Test Split (80/20)</label>
+          </div>
+          <div class="field">
+            <button id="bt-run" class="btn btn-primary">Run Backtest</button>
+          </div>
+        </div>
+
+        <div id="bt-status" class="status-line"></div>
+
+        <div id="bt-results" class="hidden">
+          <div class="panel metrics-panel">
+            <div class="metric-card">
+              <div class="metric-label">Total Return</div>
+              <div class="metric-value" id="m-return">--</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">vs Buy &amp; Hold</div>
+              <div class="metric-value" id="m-vs-benchmark">--</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">Buy &amp; Hold Return</div>
+              <div class="metric-value" id="m-benchmark">--</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">Win Rate</div>
+              <div class="metric-value" id="m-winrate">--</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">Max Drawdown</div>
+              <div class="metric-value" id="m-maxdd">--</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">Sharpe Ratio</div>
+              <div class="metric-value" id="m-sharpe">--</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label"># Trades</div>
+              <div class="metric-value" id="m-trades">--</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">Avg Trade Duration</div>
+              <div class="metric-value" id="m-duration">--</div>
+            </div>
+          </div>
+
+          <div id="split-panel" class="panel split-panel hidden">
+            <h3>Train / Test Split</h3>
+            <div class="split-grid">
+              <div class="split-col">
+                <h4>In-Sample (Train)</h4>
+                <table class="split-table" id="split-train"></table>
+              </div>
+              <div class="split-col">
+                <h4>Out-of-Sample (Test)</h4>
+                <table class="split-table" id="split-test"></table>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel chart-panel">
+            <h3>Price &amp; Signals</h3>
+            <div id="price-chart" class="chart price-chart"></div>
+            <div id="indicator-chart" class="chart indicator-chart hidden"></div>
+          </div>
+
+          <div class="panel chart-panel">
+            <h3>Equity Curve vs Buy &amp; Hold</h3>
+            <div id="equity-chart" class="chart equity-chart"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== Paper Trader Tab ===================== -->
+      <section id="tab-paper-trader" class="tab-panel">
+        <div id="pt-no-keys" class="panel empty-state hidden">
+          <h2>Add your Alpaca paper trading keys to get started</h2>
+          <p>Paper trading uses Alpaca's free paper account &mdash; no real money is ever at risk.
+             Get free keys at <span class="mono">alpaca.markets</span>, then enter them below.</p>
+          <div class="key-form">
+            <div class="field">
+              <label for="pt-api-key">API Key</label>
+              <input id="pt-api-key" type="text" autocomplete="off" />
+            </div>
+            <div class="field">
+              <label for="pt-secret-key">Secret Key</label>
+              <input id="pt-secret-key" type="password" autocomplete="off" />
+            </div>
+            <button id="pt-save-keys" class="btn btn-primary">Save Keys</button>
+          </div>
+        </div>
+
+        <div id="pt-dashboard" class="hidden">
+          <div class="panel controls-panel">
+            <div class="field">
+              <label for="pt-ticker">Ticker</label>
+              <input id="pt-ticker" type="text" placeholder="AAPL" autocomplete="off" />
+            </div>
+            <div class="field">
+              <label for="pt-strategy">Strategy</label>
+              <select id="pt-strategy"></select>
+            </div>
+            <div class="field">
+              <button id="pt-start" class="btn btn-primary">Start</button>
+              <button id="pt-stop" class="btn btn-danger hidden">Stop</button>
+            </div>
+            <div class="field">
+              <button id="pt-close-position" class="btn btn-secondary hidden">Close Position</button>
+            </div>
+          </div>
+
+          <div id="pt-status" class="status-line"></div>
+
+          <div class="panel metrics-panel">
+            <div class="metric-card">
+              <div class="metric-label">Position</div>
+              <div class="metric-value" id="pt-position">Flat</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">Entry Price</div>
+              <div class="metric-value" id="pt-entry">--</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">Unrealized P&amp;L</div>
+              <div class="metric-value" id="pt-upl">--</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">Account Equity</div>
+              <div class="metric-value" id="pt-equity">--</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">Buying Power</div>
+              <div class="metric-value" id="pt-bp">--</div>
+            </div>
+          </div>
+
+          <div class="panel chart-panel">
+            <h3>Live Chart</h3>
+            <div id="pt-chart" class="chart price-chart"></div>
+          </div>
+
+          <div class="panel">
+            <h3>Trade History</h3>
+            <table class="data-table" id="pt-trade-history">
+              <thead>
+                <tr><th>Time</th><th>Signal</th><th>Side</th><th>Qty</th><th>Price</th><th>Status</th></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== Results History Tab ===================== -->
+      <section id="tab-results" class="tab-panel">
+        <div class="panel">
+          <div class="results-toolbar">
+            <input id="results-filter" type="text" placeholder="Filter by ticker or strategy..." />
+          </div>
+          <table class="data-table sortable" id="results-table">
+            <thead>
+              <tr>
+                <th data-sort="created_at">Date</th>
+                <th data-sort="ticker">Ticker</th>
+                <th data-sort="strategy">Strategy</th>
+                <th data-sort="start_date">Range</th>
+                <th data-sort="return_pct">Return</th>
+                <th data-sort="benchmark_return_pct">Buy &amp; Hold</th>
+                <th data-sort="win_rate">Win Rate</th>
+                <th data-sort="max_dd">Max DD</th>
+                <th data-sort="sharpe">Sharpe</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <div id="results-detail" class="hidden">
+          <div class="panel metrics-panel" id="results-detail-metrics"></div>
+          <div id="results-split-panel" class="panel split-panel hidden">
+            <h3>Train / Test Split</h3>
+            <div class="split-grid">
+              <div class="split-col">
+                <h4>In-Sample (Train)</h4>
+                <table class="split-table" id="results-split-train"></table>
+              </div>
+              <div class="split-col">
+                <h4>Out-of-Sample (Test)</h4>
+                <table class="split-table" id="results-split-test"></table>
+              </div>
+            </div>
+          </div>
+          <div class="panel chart-panel">
+            <h3>Price &amp; Signals</h3>
+            <div id="results-price-chart" class="chart price-chart"></div>
+            <div id="results-indicator-chart" class="chart indicator-chart hidden"></div>
+          </div>
+          <div class="panel chart-panel">
+            <h3>Equity Curve vs Buy &amp; Hold</h3>
+            <div id="results-equity-chart" class="chart equity-chart"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script src="js/lightweight-charts.js"></script>
+<script src="js/charts.js"></script>
+<script src="js/app.js"></script>

@@ -1,0 +1,9 @@
+config.json
+*.db
+paper_trades.json
+data/
+__pycache__/
+*.pyc
+.venv/
+venv/
+.claude/

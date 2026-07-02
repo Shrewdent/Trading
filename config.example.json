@@ -1,0 +1,13 @@
+{
+  "alpaca": {
+    "api_key": "YOUR_ALPACA_PAPER_API_KEY",
+    "secret_key": "YOUR_ALPACA_PAPER_SECRET_KEY"
+  },
+  "theme": "dark",
+  "last_used": {
+    "ticker": "SPY",
+    "strategy": "ma_crossover",
+    "start_date": "2020-01-01",
+    "end_date": "2025-01-01"
+  }
+}
