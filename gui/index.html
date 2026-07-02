@@ -157,53 +157,62 @@
               <select id="pt-strategy"></select>
             </div>
             <div class="field">
-              <button id="pt-start" class="btn btn-primary">Start</button>
-              <button id="pt-stop" class="btn btn-danger hidden">Stop</button>
+              <label for="pt-allocation">Allocate ($)</label>
+              <input id="pt-allocation" type="number" min="1" step="1" placeholder="2000" />
             </div>
             <div class="field">
-              <button id="pt-close-position" class="btn btn-secondary hidden">Close Position</button>
+              <button id="pt-start" class="btn btn-primary">Start Session</button>
             </div>
           </div>
 
           <div id="pt-status" class="status-line"></div>
 
-          <div class="panel metrics-panel">
-            <div class="metric-card">
-              <div class="metric-label">Position</div>
-              <div class="metric-value" id="pt-position">Flat</div>
-            </div>
-            <div class="metric-card">
-              <div class="metric-label">Entry Price</div>
-              <div class="metric-value" id="pt-entry">--</div>
-            </div>
-            <div class="metric-card">
-              <div class="metric-label">Unrealized P&amp;L</div>
-              <div class="metric-value" id="pt-upl">--</div>
-            </div>
-            <div class="metric-card">
-              <div class="metric-label">Account Equity</div>
-              <div class="metric-value" id="pt-equity">--</div>
-            </div>
-            <div class="metric-card">
-              <div class="metric-label">Buying Power</div>
-              <div class="metric-value" id="pt-bp">--</div>
-            </div>
-          </div>
+          <div id="pt-sessions"></div>
 
-          <div class="panel chart-panel">
-            <h3>Live Chart</h3>
-            <div id="pt-chart" class="chart price-chart"></div>
-          </div>
+          <template id="pt-session-card-template">
+            <div class="panel session-card">
+              <div class="session-card-header">
+                <div class="session-card-title">
+                  <span class="session-ticker"></span>
+                  <span class="badge session-strategy"></span>
+                  <span class="badge session-allocation"></span>
+                </div>
+                <div class="session-card-actions">
+                  <button class="btn btn-secondary session-close-position hidden">Close Position</button>
+                  <button class="btn btn-danger session-stop">Stop</button>
+                </div>
+              </div>
 
-          <div class="panel">
-            <h3>Trade History</h3>
-            <table class="data-table" id="pt-trade-history">
-              <thead>
-                <tr><th>Time</th><th>Signal</th><th>Side</th><th>Qty</th><th>Price</th><th>Status</th></tr>
-              </thead>
-              <tbody></tbody>
-            </table>
-          </div>
+              <div class="session-status status-line"></div>
+
+              <div class="panel metrics-panel session-metrics-panel">
+                <div class="metric-card">
+                  <div class="metric-label">Position</div>
+                  <div class="metric-value session-position">Flat</div>
+                </div>
+                <div class="metric-card">
+                  <div class="metric-label">Entry Price</div>
+                  <div class="metric-value session-entry">--</div>
+                </div>
+                <div class="metric-card">
+                  <div class="metric-label">Unrealized P&amp;L</div>
+                  <div class="metric-value session-upl">--</div>
+                </div>
+              </div>
+
+              <div class="chart session-chart price-chart"></div>
+
+              <details class="session-trade-history-details">
+                <summary>Trade History</summary>
+                <table class="data-table session-trade-history">
+                  <thead>
+                    <tr><th>Time</th><th>Signal</th><th>Side</th><th>Qty</th><th>Price</th><th>Status</th></tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </details>
+            </div>
+          </template>
         </div>
       </section>
 

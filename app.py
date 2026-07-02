@@ -43,7 +43,7 @@ def friendly_error(fn):
 
 class Api:
     def __init__(self):
-        self._trader: paper_trader.PaperTrader | None = None
+        self._traders: dict[str, paper_trader.PaperTrader] = {}
 
     # ---------- Backtester ----------
 
@@ -134,54 +134,59 @@ class Api:
 
     @friendly_error
     def start_paper_trader(self, options: dict):
-        ticker = (options.get("ticker") or "").strip()
+        ticker = (options.get("ticker") or "").strip().upper()
         strategy_name = options.get("strategy")
+        allocated_dollars = float(options.get("allocated_dollars") or 0)
+
         if not ticker:
             raise ValueError("Ticker is required.")
         if strategy_name not in strategies.REGISTRY:
             raise ValueError(f"Unknown strategy '{strategy_name}'.")
+        if allocated_dollars <= 0:
+            raise ValueError("Enter a dollar amount greater than 0 to allocate to this session.")
         if not config.has_alpaca_keys():
             raise ValueError("Add your Alpaca paper trading keys first.")
 
+        existing = self._traders.get(ticker)
+        if existing and existing.running:
+            raise ValueError(f"{ticker} already has a running session. Stop it first.")
+
         cfg = config.load()
         keys = cfg["alpaca"]
-        if self._trader is None or not self._trader.running:
-            self._trader = paper_trader.PaperTrader(keys["api_key"], keys["secret_key"])
-        self._trader.start(ticker=ticker, strategy_name=strategy_name)
+        trader = paper_trader.PaperTrader(keys["api_key"], keys["secret_key"])
+        trader.start(ticker=ticker, strategy_name=strategy_name, allocated_dollars=allocated_dollars)
+        self._traders[ticker] = trader
         return {"started": True}
 
     @friendly_error
-    def stop_paper_trader(self):
-        if self._trader:
-            self._trader.stop()
+    def stop_paper_trader(self, ticker: str):
+        trader = self._traders.get((ticker or "").strip().upper())
+        if trader:
+            trader.stop()
         return {"stopped": True}
 
     @friendly_error
-    def close_position(self):
-        if not self._trader:
-            raise ValueError("Paper trading isn't running.")
-        self._trader.close_position()
+    def close_position(self, ticker: str):
+        trader = self._traders.get((ticker or "").strip().upper())
+        if not trader:
+            raise ValueError(f"No session running for {ticker}.")
+        trader.close_position()
         return {"closed": True}
 
     @friendly_error
     def get_paper_status(self):
-        if self._trader is None:
-            return {
-                "running": False,
-                "ticker": None,
-                "strategy": None,
-                "market_open": False,
-                "position": "flat",
-                "entry_price": None,
-                "unrealized_pl": None,
-                "equity": None,
-                "buying_power": None,
-                "last_update": None,
-                "chart_data": None,
-                "trade_history": [],
-                "notifications": [],
-            }
-        return self._trader.get_status()
+        sessions = [trader.get_status() for trader in self._traders.values()]
+
+        equity, buying_power = None, None
+        for trader in self._traders.values():
+            if trader.equity is not None:
+                equity, buying_power = trader.equity, trader.buying_power
+                break
+
+        return {
+            "account": {"equity": equity, "buying_power": buying_power},
+            "sessions": sessions,
+        }
 
 
 def main():
@@ -197,8 +202,9 @@ def main():
     )
 
     def on_closing():
-        if api._trader and api._trader.running:
-            api._trader.stop()
+        for trader in api._traders.values():
+            if trader.running:
+                trader.stop()
 
     window.events.closing += on_closing
     webview.start(debug=False, http_server=True)

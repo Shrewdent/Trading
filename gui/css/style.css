@@ -469,6 +469,60 @@ input:focus, select:focus {
   color: var(--green);
 }
 
+/* ---------- Paper trader session cards ---------- */
+
+#pt-sessions {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.session-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.session-card-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.session-ticker {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.session-card-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.session-metrics-panel {
+  padding: 0;
+  border: none;
+  margin-bottom: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+}
+
+.session-chart { height: 280px; margin-bottom: 12px; }
+
+.session-trade-history-details summary {
+  cursor: pointer;
+  color: var(--text-1);
+  font-size: 13px;
+  padding: 4px 0;
+}
+
+.session-trade-history-details[open] summary {
+  color: var(--text-0);
+  margin-bottom: 8px;
+}
+
 /* ---------- Empty state ---------- */
 
 .empty-state {

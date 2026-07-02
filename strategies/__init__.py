@@ -1,9 +1,10 @@
-from . import ma_crossover, rsi_strategy, momentum
+from . import ma_crossover, rsi_strategy, momentum, bollinger
 
 REGISTRY = {
     ma_crossover.NAME: ma_crossover,
     rsi_strategy.NAME: rsi_strategy,
     momentum.NAME: momentum,
+    bollinger.NAME: bollinger,
 }
 
 

@@ -11,6 +11,8 @@ const CHART_COLORS = {
   rsi: "#c084fc",
   strategy: "#3b82f6",
   benchmark: "#9fadbc",
+  band: "#64748b",
+  bandMiddle: "#c084fc",
 };
 
 function baseChartOptions(container) {
@@ -93,10 +95,17 @@ function renderPriceChart(containerId, chartData) {
     const s = chart.addLineSeries({ color: CHART_COLORS.slow, lineWidth: 2, title: "SMA" });
     s.setData(indicators.sma);
   }
-
-  if (chartData.train_test_cutoff) {
-    candleSeries.createPriceLine; // no-op placeholder to keep candleSeries referenced
-    chart.timeScale().fitContent();
+  if (indicators.bb_upper && indicators.bb_upper.length) {
+    const s = chart.addLineSeries({ color: CHART_COLORS.band, lineWidth: 1, title: "BB upper" });
+    s.setData(indicators.bb_upper);
+  }
+  if (indicators.bb_middle && indicators.bb_middle.length) {
+    const s = chart.addLineSeries({ color: CHART_COLORS.bandMiddle, lineWidth: 1, title: "BB mid" });
+    s.setData(indicators.bb_middle);
+  }
+  if (indicators.bb_lower && indicators.bb_lower.length) {
+    const s = chart.addLineSeries({ color: CHART_COLORS.band, lineWidth: 1, title: "BB lower" });
+    s.setData(indicators.bb_lower);
   }
 
   chart.timeScale().fitContent();
@@ -148,10 +157,6 @@ function renderEquityChart(containerId, chartData) {
 
   strategySeries.setData(chartData.equity_curve.map((p) => ({ time: p.time, value: p.strategy })));
   benchmarkSeries.setData(chartData.equity_curve.map((p) => ({ time: p.time, value: p.benchmark })));
-
-  if (chartData.train_test_cutoff) {
-    strategySeries.createPriceLine; // keep reference alive
-  }
 
   chart.timeScale().fitContent();
   return chart;

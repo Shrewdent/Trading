@@ -160,7 +160,7 @@ def _segment_metrics(df: pd.DataFrame, equity: pd.Series, trades: list, start_id
 
 
 def _indicator_series(sig_df: pd.DataFrame) -> dict:
-    candidates = ["sma_fast", "sma_slow", "rsi", "sma", "roc"]
+    candidates = ["sma_fast", "sma_slow", "rsi", "sma", "roc", "bb_upper", "bb_middle", "bb_lower"]
     out = {}
     for col in candidates:
         if col not in sig_df.columns:

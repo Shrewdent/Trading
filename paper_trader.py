@@ -15,10 +15,31 @@ import broker as broker_module
 import strategies
 
 TRADE_LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "paper_trades.json")
+_TRADE_LOG_LOCK = threading.Lock()
 
 ACCOUNT_REFRESH_SECONDS = 30
 BAR_POLL_SECONDS = 60
 TICK_SECONDS = 5
+
+
+def _load_all_trades() -> list:
+    if os.path.exists(TRADE_LOG_PATH):
+        try:
+            with open(TRADE_LOG_PATH, "r") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            return []
+    return []
+
+
+def _append_trade(entry: dict) -> None:
+    """Read-modify-write under a lock so concurrent sessions (different
+    tickers, different threads) never clobber each other's log entries."""
+    with _TRADE_LOG_LOCK:
+        all_trades = _load_all_trades()
+        all_trades.append(entry)
+        with open(TRADE_LOG_PATH, "w") as f:
+            json.dump(all_trades, f, indent=2)
 
 
 class PaperTrader:
@@ -31,6 +52,7 @@ class PaperTrader:
 
         self.ticker = None
         self.strategy_name = None
+        self.allocated_dollars = None
         self.running = False
         self.market_open = False
         self.position = "flat"
@@ -41,25 +63,12 @@ class PaperTrader:
         self.last_update = None
         self.chart_data = None
         self.notifications = []
-        self.trade_history = self._load_trade_log()
+        self.trade_history = []
 
         self._last_bar_check = 0.0
         self._last_account_check = 0.0
 
     # ---------- trade log persistence ----------
-
-    def _load_trade_log(self):
-        if os.path.exists(TRADE_LOG_PATH):
-            try:
-                with open(TRADE_LOG_PATH, "r") as f:
-                    return json.load(f)
-            except (json.JSONDecodeError, OSError):
-                return []
-        return []
-
-    def _save_trade_log(self):
-        with open(TRADE_LOG_PATH, "w") as f:
-            json.dump(self.trade_history, f, indent=2)
 
     def _record_trade(self, signal, side, price, qty=0, status="filled"):
         entry = {
@@ -71,8 +80,8 @@ class PaperTrader:
             "qty": qty,
             "status": status,
         }
+        _append_trade(entry)
         self.trade_history.append(entry)
-        self._save_trade_log()
 
     def _push_notification(self, message, level="info"):
         with self._lock:
@@ -80,14 +89,18 @@ class PaperTrader:
 
     # ---------- lifecycle ----------
 
-    def start(self, ticker: str, strategy_name: str):
+    def start(self, ticker: str, strategy_name: str, allocated_dollars: float):
         if self.running:
             raise ValueError("Paper trading is already running. Stop it first.")
+        if allocated_dollars <= 0:
+            raise ValueError("Allocated dollars must be greater than 0.")
 
         self.broker.verify_connection()
 
         self.ticker = ticker.strip().upper()
         self.strategy_name = strategy_name
+        self.allocated_dollars = allocated_dollars
+        self.trade_history = [t for t in _load_all_trades() if t["ticker"] == self.ticker]
         self._last_bar_check = 0.0
         self._last_account_check = 0.0
         self._stop_flag.clear()
@@ -188,9 +201,10 @@ class PaperTrader:
                     )
 
     def _position_size(self, price):
-        if not self.buying_power or price <= 0:
+        if not self.buying_power or not self.allocated_dollars or price <= 0:
             return 0
-        raw_qty = (self.buying_power * 0.95) / price
+        spendable = min(self.allocated_dollars, self.buying_power)
+        raw_qty = (spendable * 0.95) / price
         return round(raw_qty, 4) if raw_qty > 0 else 0
 
     # ---------- chart data ----------
@@ -210,7 +224,7 @@ class PaperTrader:
         ]
 
         indicators = {}
-        for col in ("sma_fast", "sma_slow", "rsi", "sma", "roc"):
+        for col in ("sma_fast", "sma_slow", "rsi", "sma", "roc", "bb_upper", "bb_middle", "bb_lower"):
             if col not in sig_df.columns:
                 continue
             indicators[col] = [
@@ -228,11 +242,10 @@ class PaperTrader:
         }
 
     def _trade_pairs(self) -> list:
+        # self.trade_history is already scoped to self.ticker (see start()).
         pairs = []
         open_trade = None
         for t in self.trade_history:
-            if t["ticker"] != self.ticker:
-                continue
             ts = int(pd.Timestamp(t["timestamp"]).timestamp())
             if t["side"] == "buy":
                 open_trade = {"entry_date": ts, "entry_price": t["price"]}
@@ -255,12 +268,11 @@ class PaperTrader:
             "running": self.running,
             "ticker": self.ticker,
             "strategy": self.strategy_name,
+            "allocated_dollars": self.allocated_dollars,
             "market_open": self.market_open,
             "position": self.position,
             "entry_price": self.entry_price,
             "unrealized_pl": self.unrealized_pl,
-            "equity": self.equity,
-            "buying_power": self.buying_power,
             "last_update": self.last_update,
             "chart_data": self.chart_data,
             "trade_history": self.trade_history,

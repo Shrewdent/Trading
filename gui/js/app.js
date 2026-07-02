@@ -58,6 +58,20 @@ const TAB_TITLES = {
   results: "Results History",
 };
 
+const FIXED_CHART_IDS = [
+  "price-chart",
+  "indicator-chart",
+  "equity-chart",
+  "results-price-chart",
+  "results-indicator-chart",
+  "results-equity-chart",
+];
+
+function resizeAllCharts() {
+  FIXED_CHART_IDS.forEach(Charts.resizeChart);
+  document.querySelectorAll(".session-chart").forEach((el) => Charts.resizeChart(el.id));
+}
+
 function showTab(name) {
   document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
   document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
@@ -68,18 +82,10 @@ function showTab(name) {
   if (name === "paper-trader") onPaperTraderTabShown();
 
   // Charts need a real size to lay out against; nudge them after the panel is visible.
-  requestAnimationFrame(() => {
-    ["price-chart", "indicator-chart", "equity-chart", "results-price-chart", "results-indicator-chart", "results-equity-chart", "pt-chart"].forEach(
-      Charts.resizeChart
-    );
-  });
+  requestAnimationFrame(resizeAllCharts);
 }
 
-window.addEventListener("resize", () => {
-  ["price-chart", "indicator-chart", "equity-chart", "results-price-chart", "results-indicator-chart", "results-equity-chart", "pt-chart"].forEach(
-    Charts.resizeChart
-  );
-});
+window.addEventListener("resize", resizeAllCharts);
 
 // ---------- Shared helpers ----------
 
@@ -372,8 +378,6 @@ async function showBacktestDetail(id) {
 function wirePaperTraderTab() {
   document.getElementById("pt-save-keys").addEventListener("click", savePaperKeys);
   document.getElementById("pt-start").addEventListener("click", startPaperTrader);
-  document.getElementById("pt-stop").addEventListener("click", stopPaperTrader);
-  document.getElementById("pt-close-position").addEventListener("click", closePaperPosition);
 }
 
 async function onPaperTraderTabShown() {
@@ -407,44 +411,47 @@ async function savePaperKeys() {
 }
 
 async function startPaperTrader() {
-  if (!API.start_paper_trader) {
-    toast("Paper trading isn't available yet.", "error");
-    return;
-  }
-  const ticker = document.getElementById("pt-ticker").value.trim();
+  const ticker = document.getElementById("pt-ticker").value.trim().toUpperCase();
   const strategyName = document.getElementById("pt-strategy").value;
+  const allocation = parseFloat(document.getElementById("pt-allocation").value);
+
   if (!ticker) {
     toast("Enter a ticker to trade.", "error");
     return;
   }
-  const res = await API.start_paper_trader({ ticker, strategy: strategyName });
+  if (!allocation || allocation <= 0) {
+    toast("Enter a dollar amount to allocate to this session.", "error");
+    return;
+  }
+
+  const res = await API.start_paper_trader({ ticker, strategy: strategyName, allocated_dollars: allocation });
   if (!res.ok) {
     toast(res.error, "error");
     return;
   }
-  toast(`Paper trading started on ${ticker}.`, "success");
+  toast(`Paper trading started on ${ticker} with $${allocation.toFixed(0)} allocated.`, "success");
+  document.getElementById("pt-ticker").value = "";
+  document.getElementById("pt-allocation").value = "";
   refreshPaperStatus();
 }
 
-async function stopPaperTrader() {
-  if (!API.stop_paper_trader) return;
-  const res = await API.stop_paper_trader();
+async function stopPaperTrader(ticker) {
+  const res = await API.stop_paper_trader(ticker);
   if (!res.ok) {
     toast(res.error, "error");
     return;
   }
-  toast("Paper trading stopped.", "info");
+  toast(`Paper trading stopped for ${ticker}.`, "info");
   refreshPaperStatus();
 }
 
-async function closePaperPosition() {
-  if (!API.close_position) return;
-  const res = await API.close_position();
+async function closePaperPosition(ticker) {
+  const res = await API.close_position(ticker);
   if (!res.ok) {
     toast(res.error, "error");
     return;
   }
-  toast("Position closed.", "success");
+  toast(`Position closed for ${ticker}.`, "success");
   refreshPaperStatus();
 }
 
@@ -462,50 +469,90 @@ function stopPaperPolling() {
 }
 
 async function refreshPaperStatus() {
-  if (!API.get_paper_status) return;
   const res = await API.get_paper_status();
   if (!res.ok) return;
-  const s = res.data;
+  const { account, sessions } = res.data;
 
-  document.getElementById("pt-start").classList.toggle("hidden", s.running);
-  document.getElementById("pt-stop").classList.toggle("hidden", !s.running);
-  document.getElementById("pt-close-position").classList.toggle("hidden", !s.position || s.position === "flat");
+  document.getElementById("header-equity").textContent = account.equity ? `$${account.equity.toFixed(2)}` : "--";
+  document.getElementById("header-bp").textContent = account.buying_power ? `$${account.buying_power.toFixed(2)}` : "--";
+  document.getElementById("paper-account-summary").classList.remove("hidden");
+
+  sessions.forEach((s) => (s.notifications || []).forEach((n) => toast(n.message, n.level || "info")));
+
+  const runningSessions = sessions.filter((s) => s.running);
+
+  const liveBadge = document.getElementById("paper-live-badge");
+  liveBadge.textContent = `Live: ${runningSessions.length > 0 ? "Yes" : "No"}`;
+  liveBadge.classList.toggle("on", runningSessions.length > 0);
+
+  if (runningSessions.length === 0) {
+    setStatus("pt-status", "No sessions running.", "");
+  } else {
+    const anyOpen = runningSessions.some((s) => s.market_open);
+    const plural = runningSessions.length > 1 ? "s" : "";
+    setStatus(
+      "pt-status",
+      `${anyOpen ? "Market open" : "Market closed"} &middot; ${runningSessions.length} session${plural} running`,
+      "success"
+    );
+  }
+
+  const container = document.getElementById("pt-sessions");
+  const activeTickers = new Set(runningSessions.map((s) => s.ticker));
+  container.querySelectorAll(".session-card").forEach((card) => {
+    if (!activeTickers.has(card.dataset.ticker)) card.remove();
+  });
+
+  runningSessions.forEach((s) => updateSessionCard(getOrCreateSessionCard(s.ticker), s));
+
+  resizeAllCharts();
+}
+
+function getOrCreateSessionCard(ticker) {
+  const existing = document.querySelector(`#pt-sessions .session-card[data-ticker="${ticker}"]`);
+  if (existing) return existing;
+
+  const template = document.getElementById("pt-session-card-template");
+  const fragment = template.content.cloneNode(true);
+  const card = fragment.querySelector(".session-card");
+  card.dataset.ticker = ticker;
+  card.querySelector(".session-ticker").textContent = ticker;
+  card.querySelector(".session-chart").id = `pt-chart-${ticker}`;
+  card.querySelector(".session-stop").addEventListener("click", () => stopPaperTrader(ticker));
+  card.querySelector(".session-close-position").addEventListener("click", () => closePaperPosition(ticker));
+
+  document.getElementById("pt-sessions").appendChild(card);
+  return card;
+}
+
+function updateSessionCard(card, s) {
+  card.querySelector(".session-strategy").textContent = (STRATEGIES.find((x) => x.name === s.strategy) || {}).label || s.strategy;
+  card.querySelector(".session-allocation").textContent = `$${Number(s.allocated_dollars).toFixed(0)} alloc`;
+  card.querySelector(".session-close-position").classList.toggle("hidden", !s.position || s.position === "flat");
 
   const statusParts = [
     s.market_open ? "Market open" : "Market closed",
-    s.running ? `Strategy running (${s.strategy} on ${s.ticker})` : "Strategy stopped",
     s.last_update ? `Last update: ${s.last_update}` : null,
   ].filter(Boolean);
-  setStatus("pt-status", statusParts.join(" &middot; "), s.running ? "success" : "");
+  const statusEl = card.querySelector(".session-status");
+  statusEl.className = "session-status status-line success";
+  statusEl.innerHTML = statusParts.join(" &middot; ");
 
-  document.getElementById("pt-position").textContent = s.position === "long" ? "Long" : "Flat";
-  document.getElementById("pt-entry").textContent = s.entry_price ? `$${s.entry_price.toFixed(2)}` : "--";
-  const uplEl = document.getElementById("pt-upl");
+  card.querySelector(".session-position").textContent = s.position === "long" ? "Long" : "Flat";
+  card.querySelector(".session-entry").textContent = s.entry_price ? `$${s.entry_price.toFixed(2)}` : "--";
+  const uplEl = card.querySelector(".session-upl");
   uplEl.textContent = s.unrealized_pl !== null && s.unrealized_pl !== undefined ? fmtPct(s.unrealized_pl) : "--";
-  uplEl.className = "metric-value " + pctClass(s.unrealized_pl);
-  document.getElementById("pt-equity").textContent = s.equity ? `$${s.equity.toFixed(2)}` : "--";
-  document.getElementById("pt-bp").textContent = s.buying_power ? `$${s.buying_power.toFixed(2)}` : "--";
-
-  document.getElementById("header-equity").textContent = s.equity ? `$${s.equity.toFixed(2)}` : "--";
-  document.getElementById("header-bp").textContent = s.buying_power ? `$${s.buying_power.toFixed(2)}` : "--";
-  document.getElementById("paper-account-summary").classList.remove("hidden");
-  const liveBadge = document.getElementById("paper-live-badge");
-  liveBadge.textContent = `Live: ${s.running ? "Yes" : "No"}`;
-  liveBadge.classList.toggle("on", !!s.running);
+  uplEl.className = "metric-value session-upl " + pctClass(s.unrealized_pl);
 
   if (s.chart_data) {
-    Charts.renderPriceChart("pt-chart", s.chart_data);
+    Charts.renderPriceChart(card.querySelector(".session-chart").id, s.chart_data);
   }
 
-  if (Array.isArray(s.notifications)) {
-    s.notifications.forEach((n) => toast(n.message, n.level || "info"));
-  }
-
-  renderPaperTradeHistory(s.trade_history || []);
+  renderSessionTradeHistory(card, s.trade_history || []);
 }
 
-function renderPaperTradeHistory(trades) {
-  const tbody = document.querySelector("#pt-trade-history tbody");
+function renderSessionTradeHistory(card, trades) {
+  const tbody = card.querySelector(".session-trade-history tbody");
   tbody.innerHTML = trades
     .slice()
     .reverse()
